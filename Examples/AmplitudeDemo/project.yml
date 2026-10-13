@@ -1,0 +1,25 @@
+name: AmplitudeDemo
+
+options:
+  deploymentTarget:
+    iOS: "17.0"
+
+packages:
+  Amplitude:
+    path: ../..
+
+targets:
+  AmplitudeDemo:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    dependencies:
+      - package: Amplitude
+        product: Amplitude
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cognition.amplitudedemo
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
