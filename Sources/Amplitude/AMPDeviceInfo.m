@@ -106,6 +106,10 @@
         _carrier = @"Unknown";
     }
 
+#if TARGET_OS_SIMULATOR
+    // CoreTelephony has no commcenter service on simulators and logs XPC errors.
+    return _carrier;
+#else
     Class CTTelephonyNetworkInfo = NSClassFromString(@"CTTelephonyNetworkInfo");
     if (!CTTelephonyNetworkInfo) {
         return _carrier;
@@ -145,6 +149,7 @@
         _carrier = imp2(carrier, carrierName);
     }
     return _carrier;
+#endif
 }
 
 - (NSString *)country {

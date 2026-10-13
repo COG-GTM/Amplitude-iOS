@@ -107,4 +107,11 @@
     XCTAssertEqualObjects(_deviceInfo.carrier, @"Unknown");
 }
 
+#if TARGET_OS_SIMULATOR
+- (void)testCarrierSkipsCoreTelephonyOnSimulator {
+    XCTAssertEqualObjects(_deviceInfo.carrier, @"Unknown");
+    XCTAssertNil([_deviceInfo valueForKey:@"networkInfo"]);
+}
+#endif
+
 @end
