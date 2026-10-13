@@ -63,8 +63,8 @@ private final class AmplitudeService: ObservableObject {
 
             DispatchQueue.main.async {
                 self?.append(event)
-                next(payload)
             }
+            next(payload)
         }
         amplitude.addEventMiddleware(middleware)
         amplitude.initializeApiKey(providedKey.isEmpty ? "local-only" : providedKey)
