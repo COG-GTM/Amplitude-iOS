@@ -183,10 +183,18 @@
         int interceptedUploadPeriodSeconds = _interceptedUploadPeriodSeconds;
         [_backgroundQueue addOperationWithBlock:^{
             dispatch_async(dispatch_get_main_queue(), ^{
-                [weakSelf performSelector:@selector(transferInterceptedIdentify) withObject:nil afterDelay:interceptedUploadPeriodSeconds];
+                [weakSelf performSelector:@selector(scheduledTransferFired) withObject:nil afterDelay:interceptedUploadPeriodSeconds];
             });
         }];
     }
+}
+
+// Timer fires on the main run loop; hop back to the background queue so transfers never run concurrently with intercepts
+- (void)scheduledTransferFired {
+    __weak AMPIdentifyInterceptor *weakSelf = self;
+    [_backgroundQueue addOperationWithBlock:^{
+        [weakSelf transferInterceptedIdentify];
+    }];
 }
 
 // Transfers all intercepted Identify's as a single Identify to (non-intercepted) Identify storage

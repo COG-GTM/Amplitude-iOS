@@ -14,6 +14,23 @@
 
 @interface AMPIdentifyInterceptor(PrivateTests)
 - (AMPDatabaseHelper *)dbHelper;
+- (void)transferInterceptedIdentify;
+@end
+
+@interface QueueRecordingIdentifyInterceptor : AMPIdentifyInterceptor
+@property (nonatomic, strong) NSMutableArray<NSOperationQueue *> *transferQueues; // guarded by @synchronized(self)
+@end
+
+@implementation QueueRecordingIdentifyInterceptor
+
+- (void)transferInterceptedIdentify {
+    id queue = [NSOperationQueue currentQueue] ?: [NSNull null];
+    @synchronized (self) {
+        [self.transferQueues addObject:queue];
+    }
+    [super transferInterceptedIdentify];
+}
+
 @end
 
 @interface IdentifyInterceptorTests : XCTestCase
@@ -131,6 +148,55 @@
     XCTAssertEqual(self->_dbHelper.getInterceptedIdentifyCount, 0);
     // Note: we can't check getEventCount = 1 since the IdenitfyInterceptor only adds intercepted idenitfies to DB
     XCTAssertEqual(self->_dbHelper.getEventCount, 0);
+}
+
+- (void)testScheduledTransferRunsOnBackgroundQueue {
+    QueueRecordingIdentifyInterceptor *interceptor = [QueueRecordingIdentifyInterceptor getIdentifyInterceptor:_dbHelper backgroundQueue:_backgroundQueue];
+    interceptor.transferQueues = [NSMutableArray array];
+    // KVC falls back to the _interceptedUploadPeriodSeconds ivar.
+    [interceptor setValue:@0 forKey:@"interceptedUploadPeriodSeconds"];
+
+    const int identifyCount = 50;
+    XCTestExpectation *interceptsDone = [self expectationWithDescription:@"All identifies intercepted"];
+    for (int i = 0; i < identifyCount; i++) {
+        NSMutableDictionary *event = [self getIdentifyEvent:[AMPIdentify.identify set:[NSString stringWithFormat:@"key-%d", i] value:@"value"]];
+        [_backgroundQueue addOperationWithBlock:^{
+            [interceptor intercept:event];
+        }];
+    }
+    [_backgroundQueue addOperationWithBlock:^{
+        [interceptsDone fulfill];
+    }];
+
+    [_backgroundQueue setSuspended:NO];
+    [self waitForExpectations:@[interceptsDone] timeout:5];
+
+    NSPredicate *emptyInterceptedIdentifies = [NSPredicate predicateWithBlock:^BOOL(id evaluatedObject, NSDictionary *bindings) {
+        return self->_dbHelper.getInterceptedIdentifyCount == 0;
+    }];
+    [self expectationForPredicate:emptyInterceptedIdentifies evaluatedWithObject:nil handler:nil];
+    [self waitForExpectationsWithTimeout:5 handler:nil];
+    [_backgroundQueue waitUntilAllOperationsAreFinished];
+
+    XCTAssertEqual(_dbHelper.getInterceptedIdentifyCount, 0);
+    NSArray<NSOperationQueue *> *transferQueues;
+    @synchronized (interceptor) {
+        transferQueues = [interceptor.transferQueues copy];
+    }
+    XCTAssertGreaterThan(transferQueues.count, 0);
+    for (NSOperationQueue *queue in transferQueues) {
+        XCTAssertEqual(queue, _backgroundQueue);
+    }
+
+    NSMutableSet<NSString *> *transferredKeys = [NSMutableSet set];
+    for (NSDictionary *identify in [_dbHelper getIdentifys:-1 limit:-1]) {
+        NSDictionary *userProperties = [AMPEventUtils getUserProperties:identify];
+        [transferredKeys addObjectsFromArray:[userProperties[AMP_OP_SET] allKeys]];
+    }
+    for (int i = 0; i < identifyCount; i++) {
+        NSString *key = [NSString stringWithFormat:@"key-%d", i];
+        XCTAssertTrue([transferredKeys containsObject:key]);
+    }
 }
 
 
