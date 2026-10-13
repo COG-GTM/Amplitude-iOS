@@ -145,6 +145,8 @@ static NSString *const APP_BUILD = @"app_build";
 
     BOOL _inForeground;
     BOOL _offline;
+    BOOL _optOut;
+    BOOL _optOutSetExplicitly;
 
     int _numRetries;
     int _maxRetries;
@@ -229,6 +231,8 @@ static NSString *const APP_BUILD = @"app_build";
         _coppaControlEnabled = NO;
         self.instanceName = instanceName;
         _dbHelper = [AMPDatabaseHelper getDatabaseHelper:instanceName];
+        _optOut = [[_dbHelper getLongValue:OPT_OUT] boolValue];
+        _optOutSetExplicitly = NO;
         _middlewareRunner = [AMPMiddlewareRunner middleRunner];
 
         self.eventUploadThreshold = kAMPEventUploadThreshold;
@@ -363,6 +367,11 @@ static NSString *const APP_BUILD = @"app_build";
     NSNumber *optOut = [eventsData objectForKey:OPT_OUT];
     if (optOut != nil) {
         success &= [defaultDbHelper insertOrReplaceKeyLongValue:OPT_OUT value:optOut];
+        @synchronized (self) {
+            if (!self->_optOutSetExplicitly) {
+                self->_optOut = [optOut boolValue];
+            }
+        }
     }
     NSString *deviceId = [eventsData objectForKey:DEVICE_ID];
     if (deviceId != nil) {
@@ -1563,6 +1572,11 @@ static NSString *const APP_BUILD = @"app_build";
 }
 
 - (void)setOptOut:(BOOL)enabled {
+    @synchronized (self) {
+        _optOut = enabled;
+        _optOutSetExplicitly = YES;
+    }
+
     [self runOnBackgroundQueue:^{
         NSNumber *value = [NSNumber numberWithBool:enabled];
         (void) [self.dbHelper insertOrReplaceKeyLongValue:OPT_OUT value:value];
@@ -1608,7 +1622,9 @@ static NSString *const APP_BUILD = @"app_build";
 }
 
 - (BOOL)optOut {
-    return [[self.dbHelper getLongValue:OPT_OUT] boolValue];
+    @synchronized (self) {
+        return _optOut;
+    }
 }
 
 - (void)setDeviceId:(NSString *)deviceId {

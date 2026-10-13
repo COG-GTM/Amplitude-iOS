@@ -87,6 +87,48 @@
     XCTAssert([[self.amplitude getLastEvent][@"event_type"] isEqualToString:@"Opted In"]);
 }
 
+- (void)testOptOutReadableImmediatelyAfterSet {
+    [self.amplitude initializeApiKey:apiKey];
+    [self.amplitude flushQueue];
+    [self.amplitude.backgroundQueue setSuspended:YES];
+
+    [self.amplitude setOptOut:YES];
+    XCTAssertTrue(self.amplitude.optOut);
+    XCTAssertFalse([[self.databaseHelper getLongValue:@"opt_out"] boolValue]);
+
+    [self.amplitude setOptOut:NO];
+    XCTAssertFalse(self.amplitude.optOut);
+    [self.amplitude.backgroundQueue setSuspended:NO];
+}
+
+- (void)testOptOutPersistedToDatabase {
+    [self.amplitude setOptOut:YES];
+    [self.amplitude flushQueue];
+    XCTAssertTrue([[self.databaseHelper getLongValue:@"opt_out"] boolValue]);
+
+    [self.amplitude setOptOut:NO];
+    [self.amplitude flushQueue];
+    XCTAssertFalse([[self.databaseHelper getLongValue:@"opt_out"] boolValue]);
+}
+
+- (void)testOptOutLoadedFromDatabaseOnInit {
+    [self.amplitude setOptOut:YES];
+    [self.amplitude flushQueue];
+
+    Amplitude *fresh = [[Amplitude alloc] init];
+    XCTAssertTrue(fresh.optOut);
+    [fresh flushQueueWithQueue:fresh.initializerQueue];
+    [fresh flushQueue];
+    [fresh removeObservers];
+
+    [self.databaseHelper insertOrReplaceKeyLongValue:@"opt_out" value:@NO];
+    Amplitude *freshOptedIn = [[Amplitude alloc] init];
+    XCTAssertFalse(freshOptedIn.optOut);
+    [freshOptedIn flushQueueWithQueue:freshOptedIn.initializerQueue];
+    [freshOptedIn flushQueue];
+    [freshOptedIn removeObservers];
+}
+
 - (void)testUserPropertiesSet {
     [self.amplitude initializeApiKey:apiKey];
     AMPDatabaseHelper *dbHelper = [AMPDatabaseHelper getDatabaseHelper];
